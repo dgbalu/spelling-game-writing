@@ -2,14 +2,11 @@ const worker = Tesseract.createWorker({
     logger: m => console.log(m)
 });
 
-// Initialize Tesseract
+// Simple initialization
 (async () => {
     await worker.load();
     await worker.loadLanguage('eng');
     await worker.initialize('eng');
-    await worker.setParameters({
-        tessedit_char_whitelist: 'abcdefghijklmnopqrstuvwxyz'
-    });
 })();
 
 const WORDS = {
@@ -155,29 +152,27 @@ function playWelcomeSound() {
 
 // Try to play sound when page loads
 document.addEventListener('DOMContentLoaded', function() {
-    // ... existing DOMContentLoaded code ...
+    // Play welcome sound
+    playWelcomeSound();
 
     // Setup canvas
     canvas = document.getElementById('writing-pad');
     context = canvas.getContext('2d');
     
-    // Set canvas size
-    function resizeCanvas() {
-        const rect = canvas.parentElement.getBoundingClientRect();
-        canvas.width = rect.width;
-        canvas.height = 200;
-        context.lineWidth = 3;
-        context.lineCap = 'round';
-        context.strokeStyle = '#333';
-    }
-    
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+    // Simple canvas setup
+    setupCanvas();
+    window.addEventListener('resize', setupCanvas);
 
     // Touch events for drawing
     canvas.addEventListener('touchstart', startDrawing);
     canvas.addEventListener('touchmove', draw);
     canvas.addEventListener('touchend', stopDrawing);
+
+    // Mouse events for desktop testing
+    canvas.addEventListener('mousedown', startDrawingMouse);
+    canvas.addEventListener('mousemove', drawMouse);
+    canvas.addEventListener('mouseup', stopDrawing);
+    canvas.addEventListener('mouseleave', stopDrawing);
 
     // Clear and recognize buttons
     document.getElementById('clear-btn').addEventListener('click', clearCanvas);
@@ -216,20 +211,17 @@ function clearCanvas() {
     context.clearRect(0, 0, canvas.width, canvas.height);
 }
 
-// Update the recognizeHandwriting function
+// Simplified recognition function
 async function recognizeHandwriting() {
     try {
-        // Preprocess the canvas
-        const processedCanvas = await preprocessCanvas();
-        const { data: { text } } = await worker.recognize(processedCanvas);
+        const { data: { text } } = await worker.recognize(canvas);
         
-        // Clean and process the recognized text
-        const cleanText = text.toLowerCase().trim().replace(/[^a-z]/g, '');
+        // Basic text cleanup
+        const cleanText = text.toLowerCase().trim();
         console.log('Recognized text:', cleanText);
         
         if (cleanText) {
             checkAnswer(cleanText);
-            // Clear canvas after successful recognition
             clearCanvas();
         } else {
             document.getElementById('message').textContent = '✏️ Please write more clearly';
@@ -242,118 +234,14 @@ async function recognizeHandwriting() {
     }
 }
 
-// Add image preprocessing function
-async function preprocessCanvas() {
-    // Create a new canvas for processing
-    const processCanvas = document.createElement('canvas');
-    const processCtx = processCanvas.getContext('2d');
-    
-    // Set same dimensions as original canvas
-    processCanvas.width = canvas.width;
-    processCanvas.height = canvas.height;
-    
-    // Draw original canvas content
-    processCtx.drawImage(canvas, 0, 0);
-    
-    // Get image data
-    const imageData = processCtx.getImageData(0, 0, processCanvas.width, processCanvas.height);
-    const data = imageData.data;
-    
-    // Increase contrast and convert to black and white
-    for (let i = 0; i < data.length; i += 4) {
-        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
-        const threshold = 128;
-        
-        // Convert to black or white based on threshold
-        const value = brightness < threshold ? 0 : 255;
-        data[i] = value;     // R
-        data[i + 1] = value; // G
-        data[i + 2] = value; // B
-    }
-    
-    // Put processed image data back
-    processCtx.putImageData(imageData, 0, 0);
-    
-    // Crop to content area
-    const bounds = getContentBounds(processCtx, processCanvas.width, processCanvas.height);
-    if (bounds) {
-        const croppedCanvas = document.createElement('canvas');
-        croppedCanvas.width = bounds.width;
-        croppedCanvas.height = bounds.height;
-        const croppedCtx = croppedCanvas.getContext('2d');
-        
-        croppedCtx.drawImage(processCanvas, 
-            bounds.x, bounds.y, bounds.width, bounds.height,
-            0, 0, bounds.width, bounds.height
-        );
-        
-        return croppedCanvas;
-    }
-    
-    return processCanvas;
-}
-
-// Add function to find content bounds
-function getContentBounds(ctx, width, height) {
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-    let minX = width;
-    let minY = height;
-    let maxX = 0;
-    let maxY = 0;
-    
-    // Find content boundaries
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            const i = (y * width + x) * 4;
-            if (data[i] < 255) { // If pixel is not white
-                minX = Math.min(minX, x);
-                minY = Math.min(minY, y);
-                maxX = Math.max(maxX, x);
-                maxY = Math.max(maxY, y);
-            }
-        }
-    }
-    
-    // Add padding
-    const padding = 10;
-    minX = Math.max(0, minX - padding);
-    minY = Math.max(0, minY - padding);
-    maxX = Math.min(width, maxX + padding);
-    maxY = Math.min(height, maxY + padding);
-    
-    // Return null if no content found
-    if (minX >= maxX || minY >= maxY) {
-        return null;
-    }
-    
-    return {
-        x: minX,
-        y: minY,
-        width: maxX - minX,
-        height: maxY - minY
-    };
-}
-
-// Update canvas setup to improve drawing quality
+// Keep the canvas setup simple
 function setupCanvas() {
     const rect = canvas.parentElement.getBoundingClientRect();
     canvas.width = rect.width;
     canvas.height = 200;
-    
-    // Improve line quality
     context.lineWidth = 4;
     context.lineCap = 'round';
-    context.lineJoin = 'round';
     context.strokeStyle = '#000';
-    
-    // Handle high DPI displays
-    const dpr = window.devicePixelRatio || 1;
-    canvas.style.width = rect.width + "px";
-    canvas.style.height = "200px";
-    canvas.width = rect.width * dpr;
-    canvas.height = 200 * dpr;
-    context.scale(dpr, dpr);
 }
 
 // Update showWelcomeScreen function
@@ -431,4 +319,27 @@ document.getElementById('user-input').addEventListener('keyup', function(e) {
     if (e.key === 'Enter') {
         checkAnswer();
     }
-}); 
+});
+
+// Add mouse versions of the drawing functions
+function startDrawingMouse(e) {
+    isDrawing = true;
+    const rect = canvas.getBoundingClientRect();
+    context.beginPath();
+    context.moveTo(
+        e.clientX - rect.left,
+        e.clientY - rect.top
+    );
+    e.preventDefault();
+}
+
+function drawMouse(e) {
+    if (!isDrawing) return;
+    const rect = canvas.getBoundingClientRect();
+    context.lineTo(
+        e.clientX - rect.left,
+        e.clientY - rect.top
+    );
+    context.stroke();
+    e.preventDefault();
+} 
